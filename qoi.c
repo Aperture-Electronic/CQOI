@@ -3,6 +3,7 @@
 // Date: 2022/01
 // Description: QOI encoder/decoder library
 #include <malloc.h>
+#include <memory.h>
 #include "qoi.h"
 
 uint8_t colorEqual(color_u a, color_u b)
@@ -114,7 +115,12 @@ color_u lumaDecode(uint8_t data, uint8_t cbcr, color_u lastColor)
     return newColor;
 }
 
+
+#if defined(QOI_ENABLE_STAT)
+uint32_t qoiEncode(ImageMat *imageMat, uint8_t **pDataBuffer, uint32_t **qoi_stat)
+#else
 uint32_t qoiEncode(ImageMat *imageMat, uint8_t **pDataBuffer)
+#endif
 {
     // 1. Alloc the maximum data space in buffer
     //  The space is same as the image matrix
@@ -132,7 +138,8 @@ uint32_t qoiEncode(ImageMat *imageMat, uint8_t **pDataBuffer)
 
 #if defined(QOI_ENABLE_STAT)
     // Perpare the statistic buffer
-    uint32_t qoi_stat[5] = {0, 0, 0, 0, 0};
+    *qoi_stat = (uint32_t *)malloc(QOI_ENCODING_METHOD_COUNT * sizeof(uint32_t));
+    memset(*qoi_stat, 0, QOI_ENCODING_METHOD_COUNT * sizeof(uint32_t));
 #endif
 
     // 3. Pixel-wise scan and encode
@@ -154,7 +161,7 @@ uint32_t qoiEncode(ImageMat *imageMat, uint8_t **pDataBuffer)
             color_u color;
             color_diff color_d; // Delta color
             color.color_32b = GetPixel(imageMat, x, y);
-            
+
             // Get color hash
             qoi_hash_t hash = qoiHash(color);
 
@@ -199,8 +206,8 @@ uint32_t qoiEncode(ImageMat *imageMat, uint8_t **pDataBuffer)
                     run_mode = 0; // And, clear the run mode
 
 #if defined(QOI_ENABLE_STAT)
-                                  // Statistic
-                    qoi_stat[QOI_ENCODE_RUN]++;
+                    // Statistic
+                    (*qoi_stat)[QOI_ENCODE_RUN]++;
 #endif
 
                     // We need to execute next codes for current pixel
@@ -282,7 +289,7 @@ uint32_t qoiEncode(ImageMat *imageMat, uint8_t **pDataBuffer)
 
 #if defined(QOI_ENABLE_STAT)
         STAT_UPDATE:
-            qoi_stat[encode_op]++;
+            (*qoi_stat)[encode_op]++;
 #endif
         }
     }

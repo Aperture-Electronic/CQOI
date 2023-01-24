@@ -1,4 +1,6 @@
 // QOI encoder/decoder library
+#pragma once
+
 #include <stdint.h>
 #include "../image/image_mat.h"
 
@@ -7,6 +9,20 @@
 
 // Worst QOI buffer coefficient
 #define QOI_WORST_BUFFER_COEFF 4
+
+// QOI encoding
+#if defined(QOI_ENABLE_STAT)
+#define QOI_ENCODING_METHOD_COUNT 5
+
+static const char* QOI_ENCODING_METHOD_NAME[QOI_ENCODING_METHOD_COUNT] = 
+{
+    "RGB",
+    "INDEX",
+    "DIFF",
+    "LUMA",
+    "RUN"
+};
+#endif
 
 // QOI operation code
 #define QOI_OP_INDEX    0x00
@@ -64,5 +80,10 @@ typedef enum
 } qoi_op;
 
 
-uint32_t qoiEncode(ImageMat* imageMat, uint8_t** pDataBuffer);
+#if defined(QOI_ENABLE_STAT)
+uint32_t qoiEncode(ImageMat* imageMat, uint8_t** pDataBuffer, uint32_t** qoi_stat);               
+#else
+uint32_t qoiEncode(ImageMat* imageMat, uint8_t** pDataBuffer); 
+#endif
+
 void qoiDecode(uint8_t* dataBuffer, ImageMat* imageMat);
