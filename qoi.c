@@ -291,7 +291,15 @@ uint32_t qoiEncode(ImageMat *imageMat, uint8_t **pDataBuffer)
         STAT_UPDATE:
             (*qoi_stat)[encode_op]++;
 #endif
-        }
+        } // x
+    } // y
+
+    if (run_mode) // If we still in running mode after all pixels 
+    {
+        // Save the last running encode
+        *(uint8_t *)(dataBuffer + fileOffset) = QOI_OP_RUN | run_length;
+        fileOffset += QOI_LEN_RUN;
+        run_mode = 0;
     }
 
     return fileOffset;
