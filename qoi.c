@@ -8,7 +8,21 @@
 
 uint8_t colorEqual(color_u a, color_u b)
 {
+#if defined(QOI_ENABLE_RGBA)
+    return (a.color_32b == b.color_32b);
+#else
     return ((a.color_32b & 0x00FFFFFF) == (b.color_32b & 0x00FFFFFF));
+#endif
+}
+
+
+uint8_t alphaEqual(color_u a, color_u b)
+{
+#if defined(QOI_ENABLE_RGBA)
+    return a.rgba.alpha == b.rgba.alpha;
+#else
+    return 1;
+#endif
 }
 
 void colorDiff(color_u a, color_u b, color_diff *diff)
@@ -71,7 +85,12 @@ uint8_t colorLumaDiff(color_u a, color_u b, color_diff *ycbcr)
 
 qoi_hash_t qoiHash(color_u color)
 {
+#if defined(QOI_ENABLE_RGBA)
+    int hash = color.rgba.red * 3  + color.rgba.green * 5 + 
+               color.rgba.blue * 7 + color.rgba.alpha * 11;
+#else
     int hash = color.rgba.red * 3 + color.rgba.green * 5 + color.rgba.blue * 7;
+#endif
     return (hash % QOI_HASH_LUT_SIZE);
 }
 
@@ -90,6 +109,7 @@ color_u smallDiffDecode(uint8_t data, color_u lastColor)
     newColor.rgba.red = lastColor.rgba.red + dr_s;
     newColor.rgba.green = lastColor.rgba.green + dg_s;
     newColor.rgba.blue = lastColor.rgba.blue + db_s;
+    newColor.rgba.alpha = lastColor.rgba.alpha;
 
     return newColor;
 }
@@ -111,6 +131,7 @@ color_u lumaDecode(uint8_t data, uint8_t cbcr, color_u lastColor)
     newColor.rgba.red = lastColor.rgba.red + dr_s;
     newColor.rgba.green = lastColor.rgba.green + dg_s;
     newColor.rgba.blue = lastColor.rgba.blue + db_s;
+    newColor.rgba.alpha = lastColor.rgba.alpha;
 
     return newColor;
 }
@@ -165,6 +186,7 @@ uint32_t qoiEncode(ImageMat *imageMat, uint8_t **pDataBuffer)
             // Get color hash
             qoi_hash_t hash = qoiHash(color);
 
+        
             // a). Check if the color is same as last
             if (colorEqual(color, lastColor))
             {
@@ -215,7 +237,7 @@ uint32_t qoiEncode(ImageMat *imageMat, uint8_t **pDataBuffer)
             }
 
             // b). Try to use different to encode small difference pixels
-            if (colorSmallDiff(color, lastColor, &color_d))
+            if (alphaEqual(color, lastColor) && colorSmallDiff(color, lastColor, &color_d))
             {
                 // Use DIFF to encode
                 uint8_t diff = (color_d.red << 4) | (color_d.green << 2) | (color_d.blue << 0);
@@ -227,31 +249,28 @@ uint32_t qoiEncode(ImageMat *imageMat, uint8_t **pDataBuffer)
                 encode_op = QOI_ENCODE_DIFF;
 #endif
 
-                goto LAST_COLOR_UPDATE;
+                goto HASH_UPDATE;
             }
 
             // c). Query the LUT and try to use Hash to encode
-            if (hashLUT[hash].rgba.alpha == 0xFF) // If the LUT valid
+            if (colorEqual(hashLUT[hash], color))
             {
-                if (colorEqual(hashLUT[hash], color))
-                {
-                    // When encoding, we must check the color in LUT
-                    // is or not equal to the pixel color.
-                    // If the color is same, use INDEX to encode.
-                    // Otherwise, use other encoding method and update the LUT.
-                    *(uint8_t *)(dataBuffer + fileOffset) = QOI_OP_INDEX | hash;
-                    fileOffset += QOI_LEN_INDEX;
+                // When encoding, we must check the color in LUT
+                // is or not equal to the pixel color.
+                // If the color is same, use INDEX to encode.
+                // Otherwise, use other encoding method and update the LUT.
+                *(uint8_t *)(dataBuffer + fileOffset) = QOI_OP_INDEX | hash;
+                fileOffset += QOI_LEN_INDEX;
 
 #if defined(QOI_ENABLE_STAT)
-                    // Statistic
-                    encode_op = QOI_ENCODE_INDEX;
+                // Statistic
+                encode_op = QOI_ENCODE_INDEX;
 #endif
-                    goto LAST_COLOR_UPDATE;
-                }
+                goto LAST_COLOR_UPDATE;
             }
 
             // d). Try to use luma different
-            if (colorLumaDiff(color, lastColor, &color_d))
+            if (alphaEqual(color, lastColor) && colorLumaDiff(color, lastColor, &color_d))
             {
                 // Use LUMA to encode
                 *(uint8_t *)(dataBuffer + fileOffset) = QOI_OP_LUMA | color_d.green;
@@ -263,26 +282,49 @@ uint32_t qoiEncode(ImageMat *imageMat, uint8_t **pDataBuffer)
                 encode_op = QOI_ENCODE_LUMA;
 #endif
 
-                goto LAST_COLOR_UPDATE;
+                goto HASH_UPDATE;
             }
 
-            // e). The worst case: original RGB
-            *(uint8_t *)(dataBuffer + fileOffset) = QOI_OP_RGB;
-            *(uint8_t *)(dataBuffer + fileOffset + 1) = color.rgba.red;
-            *(uint8_t *)(dataBuffer + fileOffset + 2) = color.rgba.green;
-            *(uint8_t *)(dataBuffer + fileOffset + 3) = color.rgba.blue;
-            fileOffset += QOI_LEN_RGB;
+            // e). The worst case: original RGB/RGBA
+            if (alphaEqual(color, lastColor))
+            {
+                *(uint8_t *)(dataBuffer + fileOffset) = QOI_OP_RGB;
+                *(uint8_t *)(dataBuffer + fileOffset + 1) = color.rgba.red;
+                *(uint8_t *)(dataBuffer + fileOffset + 2) = color.rgba.green;
+                *(uint8_t *)(dataBuffer + fileOffset + 3) = color.rgba.blue;
+                fileOffset += QOI_LEN_RGB;
 
 #if defined(QOI_ENABLE_STAT)
-            // Statistic
-            encode_op = QOI_ENCODE_RGB;
+                // Statistic
+                encode_op = QOI_ENCODE_RGB;
+#endif
+            }
+#if defined(QOI_ENABLE_RGBA)
+            else
+            {
+                *(uint8_t *)(dataBuffer + fileOffset) = QOI_OP_RGBA;
+                *(uint8_t *)(dataBuffer + fileOffset + 1) = color.rgba.red;
+                *(uint8_t *)(dataBuffer + fileOffset + 2) = color.rgba.green;
+                *(uint8_t *)(dataBuffer + fileOffset + 3) = color.rgba.blue;
+                *(uint8_t *)(dataBuffer + fileOffset + 4) = color.rgba.alpha;
+                fileOffset += QOI_LEN_RGBA;
+
+#if defined(QOI_ENABLE_STAT)
+                // Statistic
+                encode_op = QOI_ENCODE_RGBA;
+#endif
+            }
 #endif
 
             goto HASH_UPDATE;
 
         HASH_UPDATE:
             // Update and active hash LUT
+#if defined(QOI_ENABLE_RGBA)
+            hashLUT[hash].color_32b = color.color_32b;
+#else
             hashLUT[hash].color_32b = color.color_32b | 0xFF000000;
+#endif
 
         LAST_COLOR_UPDATE:
             lastColor = color;
@@ -298,6 +340,7 @@ uint32_t qoiEncode(ImageMat *imageMat, uint8_t **pDataBuffer)
     {
         // Save the last running encode
         *(uint8_t *)(dataBuffer + fileOffset) = QOI_OP_RUN | run_length;
+        (*qoi_stat)[QOI_OP_RUN]++;
         fileOffset += QOI_LEN_RUN;
         run_mode = 0;
     }
@@ -349,11 +392,25 @@ void qoiDecode(uint8_t *dataBuffer, ImageMat *imageMat)
         uint8_t fstData = *(uint8_t *)(dataBuffer + fileOffset);
 
         // c). Decode the pixels by opcode
+#if defined(QOI_ENABLE_RGBA)
+        if (!(fstData ^ QOI_OP_RGBA)) // RGBA
+        {
+            color.rgba.red   = *(uint8_t *)(dataBuffer + fileOffset + 1);
+            color.rgba.green = *(uint8_t *)(dataBuffer + fileOffset + 2);
+            color.rgba.blue  = *(uint8_t *)(dataBuffer + fileOffset + 3);
+            color.rgba.alpha = *(uint8_t *)(dataBuffer + fileOffset + 4);
+
+            fileOffset += QOI_LEN_RGBA;
+
+            goto HASH_UPDATE;
+        }
+#endif
         if (!(fstData ^ QOI_OP_RGB)) // RGB
         {
-            color.rgba.red = *(uint8_t *)(dataBuffer + fileOffset + 1);
+            color.rgba.red   = *(uint8_t *)(dataBuffer + fileOffset + 1);
             color.rgba.green = *(uint8_t *)(dataBuffer + fileOffset + 2);
-            color.rgba.blue = *(uint8_t *)(dataBuffer + fileOffset + 3);
+            color.rgba.blue  = *(uint8_t *)(dataBuffer + fileOffset + 3);
+            color.rgba.alpha = 0xFF;
 
             fileOffset += QOI_LEN_RGB;
 
@@ -366,11 +423,6 @@ void qoiDecode(uint8_t *dataBuffer, ImageMat *imageMat)
         {
             hash = fstData & QOI_DATA_MASK;
             color = hashLUT[hash];
-            if (color.rgba.alpha != 0xFF)
-            {
-                printf("Error when decode: Invalid hash index found.");
-                break;
-            }
 
             fileOffset += QOI_LEN_INDEX;
 
@@ -382,7 +434,7 @@ void qoiDecode(uint8_t *dataBuffer, ImageMat *imageMat)
             color = smallDiffDecode(fstData, lastColor);
             fileOffset += QOI_LEN_DIFF;
 
-            goto LAST_COLOR_UPDATE;
+            goto HASH_UPDATE;
         }
 
         if (!(fstDataOpcode ^ QOI_OP_LUMA)) // LUMA
@@ -391,7 +443,7 @@ void qoiDecode(uint8_t *dataBuffer, ImageMat *imageMat)
             color = lumaDecode(fstData, cbcr, lastColor);
             fileOffset += QOI_LEN_LUMA;
 
-            goto LAST_COLOR_UPDATE;
+            goto HASH_UPDATE;
         }
 
         if (!(fstDataOpcode ^ QOI_OP_RUN)) // RUN
@@ -406,7 +458,7 @@ void qoiDecode(uint8_t *dataBuffer, ImageMat *imageMat)
     HASH_UPDATE:
         // Update and active hash LUT
         hash = qoiHash(color);
-        hashLUT[hash].color_32b = color.color_32b | 0xFF000000;
+        hashLUT[hash].color_32b = color.color_32b;
 
     LAST_COLOR_UPDATE:
         lastColor = color;
