@@ -6,13 +6,19 @@
 
 // Settings
 #define QOI_ENABLE_STAT
+#define QOI_ENABLE_RGBA
+// #define QOI_ENABLE_TWOS_COMPLEMENT
 
 // Worst QOI buffer coefficient
 #define QOI_WORST_BUFFER_COEFF 4
 
 // QOI encoding
 #if defined(QOI_ENABLE_STAT)
+#if defined(QOI_ENABLE_RGBA)
+#define QOI_ENCODING_METHOD_COUNT 6
+#else
 #define QOI_ENCODING_METHOD_COUNT 5
+#endif
 
 static const char* QOI_ENCODING_METHOD_NAME[QOI_ENCODING_METHOD_COUNT] = 
 {
@@ -20,7 +26,10 @@ static const char* QOI_ENCODING_METHOD_NAME[QOI_ENCODING_METHOD_COUNT] =
     "INDEX",
     "DIFF",
     "LUMA",
-    "RUN"
+    "RUN",
+#if defined(QOI_ENABLE_RGBA)
+    "RGBA"
+#endif
 };
 #endif
 
@@ -30,6 +39,9 @@ static const char* QOI_ENCODING_METHOD_NAME[QOI_ENCODING_METHOD_COUNT] =
 #define QOI_OP_LUMA     0x80
 #define QOI_OP_RUN      0xC0
 #define QOI_OP_RGB      0xFE
+#if defined(QOI_ENABLE_RGBA)
+#define QOI_OP_RGBA     0xFF
+#endif
 
 // QOI operation length
 #define QOI_LEN_INDEX    1
@@ -37,6 +49,9 @@ static const char* QOI_ENCODING_METHOD_NAME[QOI_ENCODING_METHOD_COUNT] =
 #define QOI_LEN_LUMA     2
 #define QOI_LEN_RUN      1
 #define QOI_LEN_RGB      4
+#if defined(QOI_ENABLE_RGBA)
+#define QOI_LEN_RGBA     5
+#endif
 
 // QOI data mask
 #define QOI_OPCODE_MASK 0xC0
@@ -55,9 +70,9 @@ typedef union
     uint32_t color_32b;
     struct 
     {
-        uint8_t red;
-        uint8_t green;
         uint8_t blue;
+        uint8_t green;
+        uint8_t red;
         uint8_t alpha;
     } rgba;
 } color_u;
@@ -76,7 +91,8 @@ typedef enum
     QOI_ENCODE_INDEX = 1,
     QOI_ENCODE_DIFF = 2,
     QOI_ENCODE_LUMA = 3,
-    QOI_ENCODE_RUN = 4
+    QOI_ENCODE_RUN = 4,
+    QOI_ENCODE_RGBA = 5
 } qoi_op;
 
 
