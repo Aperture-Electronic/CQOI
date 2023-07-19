@@ -101,6 +101,12 @@ color_u smallDiffDecode(uint8_t data, color_u lastColor)
     uint8_t dg = (delta & 0x0C) >> 2;
     uint8_t db = (delta & 0x03) >> 0;
 
+#ifndef QOI_ENABLE_TWOS_COMPLEMENT
+    dr -= 2;
+    dg -= 2;
+    db -= 2;
+#endif
+
     int16_t dr_s = (dr & 0x2) ? (dr | 0xFFFC) : dr;
     int16_t dg_s = (dg & 0x2) ? (dg | 0xFFFC) : dg;
     int16_t db_s = (db & 0x2) ? (db | 0xFFFC) : db;
@@ -119,6 +125,12 @@ color_u lumaDecode(uint8_t data, uint8_t cbcr, color_u lastColor)
     uint8_t dg = data & QOI_DATA_MASK;
     uint8_t cr = (cbcr & 0xF0) >> 4;
     uint8_t cb = (cbcr & 0x0F) >> 0;
+
+#ifndef QOI_ENABLE_TWOS_COMPLEMENT
+    dg -= 32;
+    cr -= 8;
+    cb -= 8;
+#endif
 
     int16_t dg_s = (dg & 0x20) ? (dg | 0xFFC0) : dg;
     int16_t cr_s = (cr & 0x08) ? (cr | 0xFFF8) : cr;
