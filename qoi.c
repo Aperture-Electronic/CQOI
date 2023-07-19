@@ -254,7 +254,7 @@ uint32_t qoiEncode(ImageMat *imageMat, uint8_t **pDataBuffer)
                 encode_op = QOI_ENCODE_DIFF;
 #endif
 
-                goto LAST_COLOR_UPDATE;
+                goto HASH_UPDATE;
             }
 
             // c). Query the LUT and try to use Hash to encode
@@ -292,7 +292,7 @@ uint32_t qoiEncode(ImageMat *imageMat, uint8_t **pDataBuffer)
                 encode_op = QOI_ENCODE_LUMA;
 #endif
 
-                goto LAST_COLOR_UPDATE;
+                goto HASH_UPDATE;
             }
 
             // e). The worst case: original RGB/RGBA
@@ -350,6 +350,7 @@ uint32_t qoiEncode(ImageMat *imageMat, uint8_t **pDataBuffer)
     {
         // Save the last running encode
         *(uint8_t *)(dataBuffer + fileOffset) = QOI_OP_RUN | run_length;
+        (*qoi_stat)[QOI_OP_RUN]++;
         fileOffset += QOI_LEN_RUN;
         run_mode = 0;
     }
@@ -443,7 +444,7 @@ void qoiDecode(uint8_t *dataBuffer, ImageMat *imageMat)
             color = smallDiffDecode(fstData, lastColor);
             fileOffset += QOI_LEN_DIFF;
 
-            goto LAST_COLOR_UPDATE;
+            goto HASH_UPDATE;
         }
 
         if (!(fstDataOpcode ^ QOI_OP_LUMA)) // LUMA
@@ -452,7 +453,7 @@ void qoiDecode(uint8_t *dataBuffer, ImageMat *imageMat)
             color = lumaDecode(fstData, cbcr, lastColor);
             fileOffset += QOI_LEN_LUMA;
 
-            goto LAST_COLOR_UPDATE;
+            goto HASH_UPDATE;
         }
 
         if (!(fstDataOpcode ^ QOI_OP_RUN)) // RUN
